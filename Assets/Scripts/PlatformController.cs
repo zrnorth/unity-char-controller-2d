@@ -5,40 +5,91 @@ using UnityEngine;
 public class PlatformController : RaycastCollisionController
 {
     public LayerMask passengerMask;
-    public Vector3 move;
+    public Vector3[] localWaypoints;
+    public float speed;
+    public bool cyclic; // Should we reverse directions at the last waypoint, or do a circuit?
+    public float waitTime; // Time to wait at each waypoint
+    [Range(0, 2)]
+    public float easeAmount; // 0 is no easing
 
-    List<PassengerMovement> passengerMovements;
-    Dictionary<Transform, Controller2D> passengerComponentDictionary;
+    float _nextMoveTime;
+    int _fromWaypointIndex;
+    float _percentBetweenWaypoints;
+    Vector3[] _globalWaypoints;
+    List<PassengerMovement> _passengerMovements;
+    Dictionary<Transform, Controller2D> _passengerComponentDictionary;
 
     public override void Start() {
         base.Start();
-        passengerMovements = new List<PassengerMovement>();
-        passengerComponentDictionary = new Dictionary<Transform, Controller2D>();
+        _globalWaypoints = new Vector3[localWaypoints.Length];
+        for (int i = 0; i < localWaypoints.Length; i++) {
+            _globalWaypoints[i] = localWaypoints[i] + transform.position;
+        }
+        _passengerMovements = new List<PassengerMovement>();
+        _passengerComponentDictionary = new Dictionary<Transform, Controller2D>();
     }
 
     private void Update() {
         UpdateRaycastOrigins();
-        Vector3 velocity = move * Time.deltaTime;
+        Vector3 velocity = CalculatePlatformMovement();
         CalculatePassengerMovement(velocity);
         MovePassengers(true);
         transform.Translate(velocity);
         MovePassengers(false);
     }
 
-    void MovePassengers(bool beforeMovePlatform) {
-        foreach (PassengerMovement p in passengerMovements) {
-            if (p.moveBeforePlatform == beforeMovePlatform) {
-                if (!passengerComponentDictionary.ContainsKey(p.transform)) {
-                    passengerComponentDictionary.Add(p.transform, p.transform.GetComponent<Controller2D>());
+    float Ease(float x) {
+        float a = easeAmount + 1;
+        return Mathf.Pow(x, a) / (Mathf.Pow(x, a) + Mathf.Pow(1 - x, a));
+    }
+
+    Vector3 CalculatePlatformMovement() {
+        if (Time.time < _nextMoveTime) {
+            return Vector3.zero;
+        }
+
+        _fromWaypointIndex %= _globalWaypoints.Length; // reset to 0 if we've reached the end
+        int toWaypointIdx = (_fromWaypointIndex + 1) % _globalWaypoints.Length;
+        float distanceBetweenWaypoints = Vector3.Distance(_globalWaypoints[_fromWaypointIndex], _globalWaypoints[toWaypointIdx]);
+        _percentBetweenWaypoints += Time.deltaTime * speed / distanceBetweenWaypoints;
+        _percentBetweenWaypoints = Mathf.Clamp01(_percentBetweenWaypoints);
+        float easedPercentBetweenWaypoints = Ease(_percentBetweenWaypoints);
+
+        Vector3 newPos = Vector3.Lerp(_globalWaypoints[_fromWaypointIndex], _globalWaypoints[toWaypointIdx], easedPercentBetweenWaypoints);
+
+        // If we have reached the next waypoint
+        if (_percentBetweenWaypoints >= 1f) {
+            _percentBetweenWaypoints = 0;
+            _fromWaypointIndex++;
+            // if we've reached the last waypoint, turn around if not cyclic
+            if (!cyclic) {
+                if (_fromWaypointIndex >= _globalWaypoints.Length - 1) {
+                    _fromWaypointIndex = 0;
+                    System.Array.Reverse(_globalWaypoints);
                 }
-                passengerComponentDictionary[p.transform].Move(p.velocity, p.standingOnPlatform);
+            }
+            // if it is cyclic, just increment like normal and we'll return to 0th index
+
+            _nextMoveTime = Time.time + waitTime;
+        }
+
+        return newPos - transform.position;
+    }
+
+    void MovePassengers(bool beforeMovePlatform) {
+        foreach (PassengerMovement p in _passengerMovements) {
+            if (p.moveBeforePlatform == beforeMovePlatform) {
+                if (!_passengerComponentDictionary.ContainsKey(p.transform)) {
+                    _passengerComponentDictionary.Add(p.transform, p.transform.GetComponent<Controller2D>());
+                }
+                _passengerComponentDictionary[p.transform].Move(p.velocity, p.standingOnPlatform);
             }
         }
     }
 
     void CalculatePassengerMovement(Vector3 velocity) {
         var passengersMovedThisFrame = new HashSet<int>();
-        passengerMovements.Clear();
+        _passengerMovements.Clear();
 
         float directionX = Mathf.Sign(velocity.x);
         float directionY = Mathf.Sign(velocity.y);
@@ -58,7 +109,7 @@ public class PlatformController : RaycastCollisionController
                         float pushX = (directionY == 1) ? velocity.x : 0;
                         float pushY = velocity.y - (hit.distance - _skinWidth) * directionY;
 
-                        passengerMovements.Add(new PassengerMovement(hit.transform, new Vector3(pushX, pushY), (directionY == 1), true));
+                        _passengerMovements.Add(new PassengerMovement(hit.transform, new Vector3(pushX, pushY), (directionY == 1), true));
                     }
                 }
             }
@@ -78,7 +129,7 @@ public class PlatformController : RaycastCollisionController
                         float pushX = velocity.x - (hit.distance - _skinWidth) * directionX;
                         float pushY = -_skinWidth; // Small cheat to tell the passenger to check below itself for grounding
 
-                        passengerMovements.Add(new PassengerMovement(hit.transform, new Vector3(pushX, pushY), false, true));
+                        _passengerMovements.Add(new PassengerMovement(hit.transform, new Vector3(pushX, pushY), false, true));
                     }
                 }
             }
@@ -99,7 +150,7 @@ public class PlatformController : RaycastCollisionController
                         float pushX = velocity.x;
                         float pushY = velocity.y;
 
-                        passengerMovements.Add(new PassengerMovement(hit.transform, new Vector3(pushX, pushY), true, false));
+                        _passengerMovements.Add(new PassengerMovement(hit.transform, new Vector3(pushX, pushY), true, false));
                     }
                 }
             }
@@ -118,6 +169,18 @@ public class PlatformController : RaycastCollisionController
             this.velocity = velocity;
             this.standingOnPlatform = standingOnPlatform;
             this.moveBeforePlatform = moveBeforePlatform;
+        }
+    }
+    private void OnDrawGizmos() {
+        if (localWaypoints != null) {
+            Gizmos.color = Color.red;
+            float size = 0.3f;
+
+            for (int i = 0; i < localWaypoints.Length; i++) {
+                Vector3 globalWaypointPos = (Application.isPlaying) ? _globalWaypoints[i] : localWaypoints[i] + transform.position;
+                Gizmos.DrawLine(globalWaypointPos - Vector3.up * size, globalWaypointPos + Vector3.up * size);
+                Gizmos.DrawLine(globalWaypointPos - Vector3.left * size, globalWaypointPos + Vector3.left * size);
+            }
         }
     }
 }
