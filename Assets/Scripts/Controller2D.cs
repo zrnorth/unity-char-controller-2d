@@ -13,16 +13,23 @@ public class Controller2D : MonoBehaviour
     public struct CollisionInfo
     {
         public bool above, below, left, right;
+        public bool climbingSlope;
+        public float slopeAngle, slopeAnglePrevFrame;
         public void Reset() {
             above = below = left = right = false;
+            climbingSlope = false;
+            slopeAnglePrevFrame = slopeAngle;
+            slopeAngle = 0f;
         }
     }
 
     public LayerMask collisionMask;
     public int horizontalRayCount = 4;
     public int verticalRayCount = 4;
-    float _horizontalRaySpacing, _verticalRaySpacing;
+    public float maxClimbAngle = 80f;
     public CollisionInfo collisions;
+
+    float _horizontalRaySpacing, _verticalRaySpacing;
     // Consts
     const float _skinWidth = .015f;
     // Components
@@ -67,12 +74,50 @@ public class Controller2D : MonoBehaviour
                 rayOrigin, Vector2.right * directionX * rayLength, Color.blue);
 
             if (hit) {
-                velocity.x = (hit.distance - _skinWidth) * directionX;
-                rayLength = hit.distance; // ensure that other rays can't go past this collision.
-                collisions.left = (directionX == -1);
-                collisions.right = (directionX == 1);
+
+                // note: angle between vector.up and the slope's normal is equal to the angle between 
+                // vector.right and the slope.
+                float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
+
+                if (i == 0 && slopeAngle <= maxClimbAngle) {
+                    float distanceToSlopeStart = 0f;
+                    // If we are starting a new slope climb
+                    if (slopeAngle != collisions.slopeAnglePrevFrame) {
+                        // Close the remaining distance to the slope this frame.
+                        // Without this we will start climbing the slope on the tip of the ray instead
+                        // of on the player's edge.
+                        distanceToSlopeStart = hit.distance - _skinWidth;
+                        velocity.x -= distanceToSlopeStart * directionX;
+                    }
+                    ClimbSlope(ref velocity, slopeAngle);
+                    velocity.x += distanceToSlopeStart * directionX;
+                }
+
+                if (!collisions.climbingSlope || slopeAngle > maxClimbAngle) {
+                    velocity.x = (hit.distance - _skinWidth) * directionX;
+                    rayLength = hit.distance; // ensure that other rays can't go past this collision.
+                    collisions.left = (directionX == -1);
+                    collisions.right = (directionX == 1);
+                }
             }
         }
+    }
+
+    // Translates the horizontal speed (x only) into movement up a slope of the given angle
+    // such that the overall speed stays the same.
+    void ClimbSlope(ref Vector3 velocity, float slopeAngle) {
+        float moveDistance = Mathf.Abs(velocity.x);
+        float climbVelocityY = Mathf.Sin(slopeAngle * Mathf.Deg2Rad) * moveDistance;
+        if (velocity.y > climbVelocityY) {
+            // We are already moving upwards (probably jumping)
+            return;
+        }
+        velocity.x = Mathf.Cos(slopeAngle * Mathf.Deg2Rad) * moveDistance * Mathf.Sign(velocity.x);
+        velocity.y = climbVelocityY;
+        // Since we are climbing a slope, we're standing on the ground
+        collisions.below = true;
+        collisions.climbingSlope = true;
+        collisions.slopeAngle = slopeAngle;
     }
 
     void VerticalCollisions(ref Vector3 velocity) {

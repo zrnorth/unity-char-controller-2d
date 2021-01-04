@@ -37,7 +37,6 @@ public class Player : MonoBehaviour
             targetVelocityX,
             ref _velocityXSmoothing,
             (_controller.collisions.below) ? accelerationTimeGrounded : accelerationTimeAirborne);
-        _velocity.x = input.x * moveSpeed;
         _velocity.y += _gravity * Time.deltaTime;
         _controller.Move(_velocity * Time.deltaTime);
     }

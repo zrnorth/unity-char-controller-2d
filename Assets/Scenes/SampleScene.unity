@@ -345,7 +345,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   jumpHeight: 6
   timeToJumpApex: 0.6
-  accelerationTimeAirborne: 0.2
+  accelerationTimeAirborne: 0.07
   accelerationTimeGrounded: 0.1
   moveSpeed: 6
 --- !u!114 &1843015517
