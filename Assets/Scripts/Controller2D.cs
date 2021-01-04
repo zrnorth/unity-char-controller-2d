@@ -147,6 +147,23 @@ public class Controller2D : MonoBehaviour
                 collisions.above = (directionY == 1);
             }
         }
+
+        if (collisions.climbingSlope) {
+            // fire a horizontal ray from the pt on the y axis where we will be once we move
+            // to check if there is a new slope there
+            float directionX = Mathf.Sign(velocity.x);
+            rayLength = Mathf.Abs(velocity.x) + _skinWidth;
+            Vector2 rayOrigin = ((directionX == -1) ? _raycastOrigins.botLeft : _raycastOrigins.botRight) + (Vector2.up * velocity.y);
+            RaycastHit2D hit = Physics2D.Raycast(rayOrigin, directionX * Vector2.right, rayLength, collisionMask);
+            if (hit) {
+                float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
+                if (slopeAngle != collisions.slopeAngle) {  // if we've hit a new slope
+                    velocity.x = (hit.distance - _skinWidth) * directionX;
+                    collisions.slopeAngle = slopeAngle;
+                }
+            }
+
+        }
     }
 
     public void Move(Vector3 velocity) {
