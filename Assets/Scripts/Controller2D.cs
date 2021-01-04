@@ -96,6 +96,11 @@ public class Controller2D : MonoBehaviour
                 if (!collisions.climbingSlope || slopeAngle > maxClimbAngle) {
                     velocity.x = (hit.distance - _skinWidth) * directionX;
                     rayLength = hit.distance; // ensure that other rays can't go past this collision.
+
+                    // if we are climbing a slope but we hit an angle we can't climb (i.e. obstacle)
+                    if (collisions.climbingSlope) {
+                        velocity.y = Mathf.Tan(collisions.slopeAngle * Mathf.Deg2Rad) * Mathf.Abs(velocity.x);
+                    }
                     collisions.left = (directionX == -1);
                     collisions.right = (directionX == 1);
                 }
@@ -135,6 +140,9 @@ public class Controller2D : MonoBehaviour
             if (hit) {
                 velocity.y = (hit.distance - _skinWidth) * directionY;
                 rayLength = hit.distance; // ensure that other rays can't go past this collision.
+                if (collisions.climbingSlope) {
+                    velocity.x = velocity.y / Mathf.Tan(collisions.slopeAngle * Mathf.Deg2Rad) * Mathf.Sign(velocity.x);
+                }
                 collisions.below = (directionY == -1);
                 collisions.above = (directionY == 1);
             }
