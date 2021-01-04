@@ -7,20 +7,38 @@ public class PlatformController : RaycastCollisionController
     public LayerMask passengerMask;
     public Vector3 move;
 
+    List<PassengerMovement> passengerMovements;
+    Dictionary<Transform, Controller2D> passengerComponentDictionary;
 
     public override void Start() {
         base.Start();
+        passengerMovements = new List<PassengerMovement>();
+        passengerComponentDictionary = new Dictionary<Transform, Controller2D>();
     }
 
     private void Update() {
         UpdateRaycastOrigins();
         Vector3 velocity = move * Time.deltaTime;
-        MovePassengers(velocity);
+        CalculatePassengerMovement(velocity);
+        MovePassengers(true);
         transform.Translate(velocity);
+        MovePassengers(false);
     }
 
-    void MovePassengers(Vector3 velocity) {
+    void MovePassengers(bool beforeMovePlatform) {
+        foreach (PassengerMovement p in passengerMovements) {
+            if (p.moveBeforePlatform == beforeMovePlatform) {
+                if (!passengerComponentDictionary.ContainsKey(p.transform)) {
+                    passengerComponentDictionary.Add(p.transform, p.transform.GetComponent<Controller2D>());
+                }
+                passengerComponentDictionary[p.transform].Move(p.velocity, p.standingOnPlatform);
+            }
+        }
+    }
+
+    void CalculatePassengerMovement(Vector3 velocity) {
         var passengersMovedThisFrame = new HashSet<int>();
+        passengerMovements.Clear();
 
         float directionX = Mathf.Sign(velocity.x);
         float directionY = Mathf.Sign(velocity.y);
@@ -40,7 +58,7 @@ public class PlatformController : RaycastCollisionController
                         float pushX = (directionY == 1) ? velocity.x : 0;
                         float pushY = velocity.y - (hit.distance - _skinWidth) * directionY;
 
-                        hit.transform.Translate(new Vector3(pushX, pushY));
+                        passengerMovements.Add(new PassengerMovement(hit.transform, new Vector3(pushX, pushY), (directionY == 1), true));
                     }
                 }
             }
@@ -58,9 +76,9 @@ public class PlatformController : RaycastCollisionController
                     if (!passengersMovedThisFrame.Contains(hit.transform.GetInstanceID())) {
                         passengersMovedThisFrame.Add(hit.transform.GetInstanceID());
                         float pushX = velocity.x - (hit.distance - _skinWidth) * directionX;
-                        float pushY = 0f;
+                        float pushY = -_skinWidth; // Small cheat to tell the passenger to check below itself for grounding
 
-                        hit.transform.Translate(new Vector3(pushX, pushY));
+                        passengerMovements.Add(new PassengerMovement(hit.transform, new Vector3(pushX, pushY), false, true));
                     }
                 }
             }
@@ -81,10 +99,25 @@ public class PlatformController : RaycastCollisionController
                         float pushX = velocity.x;
                         float pushY = velocity.y;
 
-                        hit.transform.Translate(new Vector3(pushX, pushY));
+                        passengerMovements.Add(new PassengerMovement(hit.transform, new Vector3(pushX, pushY), true, false));
                     }
                 }
             }
+        }
+    }
+
+    struct PassengerMovement
+    {
+        public Transform transform;
+        public Vector3 velocity;
+        public bool standingOnPlatform;
+        public bool moveBeforePlatform; // if moving up, we want to move passenger first and then platform; if moving down, we do the opposite
+
+        public PassengerMovement(Transform transform, Vector3 velocity, bool standingOnPlatform, bool moveBeforePlatform) {
+            this.transform = transform;
+            this.velocity = velocity;
+            this.standingOnPlatform = standingOnPlatform;
+            this.moveBeforePlatform = moveBeforePlatform;
         }
     }
 }

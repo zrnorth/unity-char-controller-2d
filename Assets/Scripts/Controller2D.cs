@@ -36,6 +36,7 @@ public class Controller2D : RaycastCollisionController
                 rayOrigin, Vector2.right * directionX * rayLength, Color.blue);
 
             if (hit) {
+                if (hit.distance == 0) continue; // if we're inside something don't modify velocity
                 // note: angle between vector.up and the slope's normal is equal to the angle between 
                 // vector.right and the slope.
                 float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
@@ -159,7 +160,7 @@ public class Controller2D : RaycastCollisionController
         }
     }
 
-    public void Move(Vector3 velocity) {
+    public void Move(Vector3 velocity, bool standingOnPlatform = false) {
         UpdateRaycastOrigins();
         collisions.Reset();
         collisions.velocityOld = velocity;
@@ -174,5 +175,8 @@ public class Controller2D : RaycastCollisionController
         }
 
         transform.Translate(velocity);
+        if (standingOnPlatform) {
+            collisions.below = true;
+        }
     }
 }
