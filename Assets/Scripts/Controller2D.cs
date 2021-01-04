@@ -13,13 +13,15 @@ public class Controller2D : MonoBehaviour
     public struct CollisionInfo
     {
         public bool above, below, left, right;
-        public bool climbingSlope;
+        public bool climbingSlope, descendingSlope;
         public float slopeAngle, slopeAnglePrevFrame;
+        public Vector3 velocityOld;
         public void Reset() {
             above = below = left = right = false;
-            climbingSlope = false;
+            climbingSlope = descendingSlope = false;
             slopeAnglePrevFrame = slopeAngle;
             slopeAngle = 0f;
+            velocityOld = new Vector3();
         }
     }
 
@@ -27,6 +29,7 @@ public class Controller2D : MonoBehaviour
     public int horizontalRayCount = 4;
     public int verticalRayCount = 4;
     public float maxClimbAngle = 80f;
+    public float maxDescendAngle = 75f;
     public CollisionInfo collisions;
 
     float _horizontalRaySpacing, _verticalRaySpacing;
@@ -74,12 +77,17 @@ public class Controller2D : MonoBehaviour
                 rayOrigin, Vector2.right * directionX * rayLength, Color.blue);
 
             if (hit) {
-
                 // note: angle between vector.up and the slope's normal is equal to the angle between 
                 // vector.right and the slope.
                 float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
 
                 if (i == 0 && slopeAngle <= maxClimbAngle) {
+                    // If we are descending some other slope, we're now climbing this one, so undo
+                    // all the descending work we did earlier.
+                    if (collisions.descendingSlope) {
+                        collisions.descendingSlope = false;
+                        velocity = collisions.velocityOld;
+                    }
                     float distanceToSlopeStart = 0f;
                     // If we are starting a new slope climb
                     if (slopeAngle != collisions.slopeAnglePrevFrame) {
@@ -123,6 +131,32 @@ public class Controller2D : MonoBehaviour
         collisions.below = true;
         collisions.climbingSlope = true;
         collisions.slopeAngle = slopeAngle;
+    }
+
+    // Same as above, but when you are going downwards to avoid jumping off the side of the slope.
+    void DescendSlope(ref Vector3 velocity) {
+        float directionX = Mathf.Sign(velocity.x);
+        // cast a ray downwards from the point touching the slope
+        Vector2 rayOrigin = (directionX == -1) ? _raycastOrigins.botRight : _raycastOrigins.botLeft;
+        RaycastHit2D hit = Physics2D.Raycast(rayOrigin, Vector2.down, Mathf.Infinity, collisionMask);
+        if (hit) {
+            float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
+            // if flat surface or too steep, don't descend
+            if (slopeAngle == 0f || slopeAngle > maxDescendAngle) return;
+            // if going in opposite direction, we're ascending not descending
+            if (Mathf.Sign(hit.normal.x) != directionX) return;
+            // if we're too far from the slope, we're falling not descending
+            if (hit.distance - _skinWidth > Mathf.Tan(slopeAngle * Mathf.Deg2Rad) * Mathf.Abs(velocity.x)) return;
+
+            float moveDistance = Mathf.Abs(velocity.x);
+            float descendVelocityY = Mathf.Sin(slopeAngle * Mathf.Deg2Rad) * moveDistance;
+            velocity.x = Mathf.Cos(slopeAngle * Mathf.Deg2Rad) * moveDistance * Mathf.Sign(velocity.x);
+            velocity.y -= descendVelocityY;
+            collisions.slopeAngle = slopeAngle;
+            collisions.descendingSlope = true;
+            // since we are descending a slope we are on the ground
+            collisions.below = true;
+        }
     }
 
     void VerticalCollisions(ref Vector3 velocity) {
@@ -169,6 +203,10 @@ public class Controller2D : MonoBehaviour
     public void Move(Vector3 velocity) {
         UpdateRaycastOrigins();
         collisions.Reset();
+        collisions.velocityOld = velocity;
+        if (velocity.y < 0) {
+            DescendSlope(ref velocity);
+        }
         if (velocity.x != 0) {
             HorizontalCollisions(ref velocity);
         }
