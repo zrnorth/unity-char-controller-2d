@@ -103,7 +103,7 @@ public class PlatformController : RaycastCollisionController
                 rayOrigin += Vector2.right * (_verticalRaySpacing * i);
                 RaycastHit2D hit = Physics2D.Raycast(rayOrigin, Vector2.up * directionY, rayLength, passengerMask);
 
-                if (hit) {
+                if (hit && hit.distance != 0) {
                     if (!passengersMovedThisFrame.Contains(hit.transform.GetInstanceID())) {
                         passengersMovedThisFrame.Add(hit.transform.GetInstanceID());
                         float pushX = (directionY == 1) ? velocity.x : 0;
@@ -123,7 +123,7 @@ public class PlatformController : RaycastCollisionController
                 Vector2 rayOrigin = (directionX == -1) ? _raycastOrigins.botLeft : _raycastOrigins.botRight;
                 rayOrigin += Vector2.up * (_horizontalRaySpacing * i);
                 RaycastHit2D hit = Physics2D.Raycast(rayOrigin, directionX * Vector2.right, rayLength, passengerMask);
-                if (hit) {
+                if (hit && hit.distance != 0) {
                     if (!passengersMovedThisFrame.Contains(hit.transform.GetInstanceID())) {
                         passengersMovedThisFrame.Add(hit.transform.GetInstanceID());
                         float pushX = velocity.x - (hit.distance - _skinWidth) * directionX;
@@ -144,7 +144,7 @@ public class PlatformController : RaycastCollisionController
                 rayOrigin += Vector2.right * (_verticalRaySpacing * i);
                 RaycastHit2D hit = Physics2D.Raycast(rayOrigin, Vector2.up, rayLength, passengerMask);
 
-                if (hit) {
+                if (hit && hit.distance != 0) {
                     if (!passengersMovedThisFrame.Contains(hit.transform.GetInstanceID())) {
                         passengersMovedThisFrame.Add(hit.transform.GetInstanceID());
                         float pushX = velocity.x;

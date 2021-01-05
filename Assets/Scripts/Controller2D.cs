@@ -17,6 +17,7 @@ public class Controller2D : RaycastCollisionController
         public float slopeAngle, slopeAnglePrevFrame;
         public Vector3 velocityOld;
         public Facing facing;
+        public bool fallingThroughPlatform;
         public void Reset() {
             above = below = left = right = false;
             climbingSlope = descendingSlope = false;
@@ -31,9 +32,15 @@ public class Controller2D : RaycastCollisionController
     public float maxClimbAngle = 80f;
     public float maxDescendAngle = 75f;
 
+    Vector2 _playerInput; // Used for falling through platforms.
+
     public override void Start() {
         base.Start();
         collisions.facing = Facing.Left;
+    }
+
+    void ResetFallingThroughPlatform() {
+        collisions.fallingThroughPlatform = false;
     }
 
     void HorizontalCollisions(ref Vector3 velocity) {
@@ -147,6 +154,21 @@ public class Controller2D : RaycastCollisionController
                 rayOrigin, Vector2.up * directionY * rayLength, Color.blue);
 
             if (hit) {
+                // if we are jumping up and our collision is with a Through platform, just pass through.
+                if (hit.collider.tag == "Through") {
+                    if (directionY == 1 || hit.distance == 0) {
+                        continue;
+                    }
+                    if (collisions.fallingThroughPlatform) {
+                        continue;
+                    }
+                    if (_playerInput.y == -1) {
+                        collisions.fallingThroughPlatform = true;
+                        Invoke("ResetFallingThroughPlatform", 0.5f);
+                        continue;
+                    }
+                }
+
                 velocity.y = (hit.distance - _skinWidth) * directionY;
                 rayLength = hit.distance; // ensure that other rays can't go past this collision.
                 if (collisions.climbingSlope) {
@@ -176,6 +198,12 @@ public class Controller2D : RaycastCollisionController
     }
 
     public void Move(Vector3 velocity, bool standingOnPlatform = false) {
+        Move(velocity, Vector2.zero, standingOnPlatform);
+    }
+
+    public void Move(Vector3 velocity, Vector2 input, bool standingOnPlatform = false) {
+        _playerInput = input;
+
         UpdateRaycastOrigins();
         collisions.Reset();
         collisions.velocityOld = velocity;

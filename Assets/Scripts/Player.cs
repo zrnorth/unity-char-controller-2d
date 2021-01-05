@@ -5,7 +5,8 @@ using UnityEngine;
 [RequireComponent(typeof(Controller2D))]
 public class Player : MonoBehaviour
 {
-    public float jumpHeight = 4f;
+    public float minJumpHeight = 1f;
+    public float maxJumpHeight = 4f;
     public float timeToJumpApex = 0.4f;
     public float accelerationTimeAirborne = 0.2f;
     public float accelerationTimeGrounded = 0.1f;
@@ -16,16 +17,17 @@ public class Player : MonoBehaviour
     public float wallStickTime = 0.25f;
 
 
-    float _gravity; // This isn't directly settable; we calculate from jumpHeight and timeToJumpApex
-    float _jumpVelocity; // similarly we calculate this
+    float _gravity;
+    float _minJumpVelocity, _maxJumpVelocity;
     Vector3 _velocity;
     float _velocityXSmoothing;
     float _wallUnstickTimer = 0f;
     Controller2D _controller;
     void Start() {
         _controller = GetComponent<Controller2D>();
-        _gravity = -(2 * jumpHeight) / Mathf.Pow(timeToJumpApex, 2);
-        _jumpVelocity = Mathf.Abs(_gravity) * timeToJumpApex;
+        _gravity = -(2 * maxJumpHeight) / Mathf.Pow(timeToJumpApex, 2);
+        _minJumpVelocity = Mathf.Sqrt(2 * Mathf.Abs(_gravity) * minJumpHeight);
+        _maxJumpVelocity = Mathf.Abs(_gravity) * timeToJumpApex;
     }
 
     void Update() {
@@ -63,9 +65,6 @@ public class Player : MonoBehaviour
             }
         }
 
-        if (_controller.collisions.above || _controller.collisions.below) {
-            _velocity.y = 0;
-        }
         if (Input.GetKeyDown(KeyCode.Space)) {
             if (wallSlidingEnabled && slidingOnWall) { // Different jumps off the wall
                 Vector2 movementToApply;
@@ -86,12 +85,21 @@ public class Player : MonoBehaviour
                 _velocity.y = movementToApply.y;
             }
             if (_controller.collisions.below) { // Jump off ground
-                _velocity.y = _jumpVelocity;
+                _velocity.y = _maxJumpVelocity;
+            }
+        }
+        if (Input.GetKeyUp(KeyCode.Space)) {
+            if (_velocity.y > _minJumpVelocity) {
+                _velocity.y = _minJumpVelocity;
             }
         }
 
 
         _velocity.y += _gravity * Time.deltaTime;
-        _controller.Move(_velocity * Time.deltaTime);
+        _controller.Move(_velocity * Time.deltaTime, input);
+
+        if (_controller.collisions.above || _controller.collisions.below) {
+            _velocity.y = 0;
+        }
     }
 }
