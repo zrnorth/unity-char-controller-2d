@@ -4,12 +4,19 @@ using UnityEngine;
 
 public class Controller2D : RaycastCollisionController
 {
+    public enum Facing
+    {
+        Left,
+        Right,
+    }
+
     public struct CollisionInfo
     {
         public bool above, below, left, right;
         public bool climbingSlope, descendingSlope;
         public float slopeAngle, slopeAnglePrevFrame;
         public Vector3 velocityOld;
+        public Facing facing;
         public void Reset() {
             above = below = left = right = false;
             climbingSlope = descendingSlope = false;
@@ -24,9 +31,17 @@ public class Controller2D : RaycastCollisionController
     public float maxClimbAngle = 80f;
     public float maxDescendAngle = 75f;
 
+    public override void Start() {
+        base.Start();
+        collisions.facing = Facing.Left;
+    }
+
     void HorizontalCollisions(ref Vector3 velocity) {
-        float directionX = Mathf.Sign(velocity.x);
+        float directionX = (collisions.facing == Facing.Right) ? 1 : -1;
         float rayLength = Mathf.Abs(velocity.x) + _skinWidth;
+        if (Mathf.Abs(velocity.x) < _skinWidth) {
+            rayLength = 2 * _skinWidth;
+        }
 
         for (int i = 0; i < horizontalRayCount; i++) {
             Vector2 rayOrigin = (directionX == -1) ? _raycastOrigins.botLeft : _raycastOrigins.botRight;
@@ -164,12 +179,14 @@ public class Controller2D : RaycastCollisionController
         UpdateRaycastOrigins();
         collisions.Reset();
         collisions.velocityOld = velocity;
+        if (velocity.x != 0) {
+            collisions.facing = (Mathf.Sign(velocity.x) == 1) ? Facing.Right : Facing.Left;
+        }
         if (velocity.y < 0) {
             DescendSlope(ref velocity);
         }
-        if (velocity.x != 0) {
-            HorizontalCollisions(ref velocity);
-        }
+        HorizontalCollisions(ref velocity);
+
         if (velocity.y != 0) {
             VerticalCollisions(ref velocity);
         }
